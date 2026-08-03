@@ -217,4 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Project-specific
 output/
+*.log
+*.js
