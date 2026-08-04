@@ -17,16 +17,7 @@ class GlyphNotInFontExcpetion(Exception):
     def __str__(self):
         return f"GlyphNotInFontException: {self.message}"
 
-
-
-def writeFontJS(font, fontpath):
-	fname = 'output/'+printableString(font.fontname) + '.js'
-	output = getFontOutput(font, fontpath)
-	with open(fname, 'w') as f:
-		f.write(output)		
-  
-
-# return a js-safe representation of the rune
+# return a js-safe representation of the rune, which can be surrounded by double quotes
 def getRuneRepresentation(rune):
 	if rune == '"':
 		return "\\\""
@@ -42,160 +33,156 @@ def printableString(str):
 	return str
 
 
+# given a font reference (composite characters), expressed as another glyph and a transform, this transforms a point using that transform
 def transformPoint(point, transform):
 	(a,b,c,d,xd,yd) = transform
 	(x,y) = point
 	(x,y) = (a*x + b*y + xd, c*x + d*y + yd)
 	return (x, y)
 
-def getFontGlyphContours(font, glyphName):
-	glyph = font[glyphName]
-	
-	if glyph.references:
-		contours = []
-		for (refGlyph, transform, _) in glyph.references:
-			for contour in getFontGlyphContours(font, refGlyph):
-				contourPts = []
-				for (point, onCurve) in contour:
-					contourPts.append((transformPoint(point, transform), onCurve))
-				contours.append(contourPts)
-		return contours
-	for layerName in glyph.layers:
-		layer = glyph.layers[layerName]
-		if layerName == 'Back':
-			continue
-		contours = []
-		for contour in layer:
-			contourPts = []
-			for point in contour:
-				contourPts.append(((point.x, point.y), point.on_curve))
-			contours.append(contourPts)
-		return contours
+class Font:
+	def __init__(self, font, fontpath):
+		self.font = font
+		self.fontpath = fontpath
 
-def getLigatures(font, glyphNames):
-	for glyphName in font:
-		# print(' ligature', glyph,glyph.getPosSub("*"))
-		glyph = font[glyphName]
-		# print('glyph', glyphName, glyph)
-		for sub in glyph.getPosSub("*"):
-			if sub[1] == 'Ligature' and "'liga'" in sub[0]:
-				# print(sub)
-				elts = sub[2:]
-				if len(elts)> 2:
-					print(f'ignoring ligature {glyphName} for {elts}')
-					continue
-				a,b = sub[2], sub[3]
-				if a in glyphNames and b in glyphNames:
-					print(f'found ligature {glyphName} for {a} and {b}', sub[0])
-					arepr = getRuneRepresentation(glyphNames[a])
-					brepr = getRuneRepresentation(glyphNames[b])
-					ligatures.append((glyphName, arepr, brepr))
-					glyphNames[glyphName] = arepr+brepr
-	return ligatures, additionalGlyphNames
+	def writeFontJS(self):
+		fname = 'output/'+printableString(self.font.fontname) + '.js'
+		output = self.getFontOutput()
+		with open(fname, 'w') as f:
+			f.write(output)		
+	  
+	def getFontGlyphContours(self, glyphName):
+		# custom replacements
+		if 'Times New Roman.ttf' in self.fontpath:
+			if glyphName == 'N':
+				glyphName = 'glyph49'
+		if 'Times New Roman Bold.ttf' in self.fontpath:
+			if glyphName == 'N':
+				glyphName = 'glyph1197'
 
-def getFontOutput(font, fontpath):
-	glyphNames = {}
-	shapes = []
-	advances = []
-	hints = []
-	# leftBearings = []
-	# for lookup in font.gsub_lookups:
-	# 	print('gsub lookups',lookup, font.getLookupInfo(lookup), font.getLookupSubtables(lookup))
-
-	# scan over all glyphs to see if there are ligatures
-
-	# if 'fi' in font:
-	# 	glyph = font['fi']
-	for rune in chars:
-		runeRepr = getRuneRepresentation(rune)
-		glyphName = fontforge.nameFromUnicode(ord(rune))
-		glyphNames[glyphName] = rune
-	ligatures = []
-	for glyphName in font:
-		# print(' ligature', glyph,glyph.getPosSub("*"))
-		glyph = font[glyphName]
-		# print('glyph', glyphName, glyph)
-		for sub in glyph.getPosSub("*"):
-			if sub[1] == 'Ligature' and "'liga'" in sub[0]:
-				# print(sub)
-				elts = sub[2:]
-				if len(elts)> 2:
-					print(f'ignoring ligature {glyphName} for {elts}')
-					continue
-				a,b = sub[2], sub[3]
-				if a in glyphNames and b in glyphNames:
-					print(f'found ligature {glyphName} for {a} and {b}', sub[0])
-					arepr = getRuneRepresentation(glyphNames[a])
-					brepr = getRuneRepresentation(glyphNames[b])
-					ligatures.append((glyphName, arepr, brepr))
-					glyphNames[glyphName] = arepr+brepr
-	# print('glyphNames', glyphNames)
-	for (glyphName, rune) in glyphNames.items():
-		# rune = glyphNames
-		runeRepr = getRuneRepresentation(rune)
-
-		# glyphName = fontforge.nameFromUnicode(ord(rune))
-		if glyphName not in font:
-			raise GlyphNotInFontExcpetion(glyphName)
-		else:
-			glyph = font[glyphName]
-			advances.append('"'+runeRepr +f'": {glyph.width}')
-			# if glyph.left_side_bearing != 0:
-			# 	leftBearings.append(f'"{runeRepr}": {glyph.left_side_bearing}')
+		glyph = self.font[glyphName]
 		
-			# print(f'glyph {rune}:{glyphName} has horizontal components {glyph.horizontalComponents}, variants {glyph.horizontalVariants}')
-			# print(f'glyph {rune}:{glyphName} has references {glyph.references}')
-			# for layerName in glyph.layers:
-			# 	layer = glyph.layers[layerName]
-			# 	print(f'glyph {rune}:{glyphName} has layer {layerName} with {len(layer)} elements')
-
-			# 	if layerName == 'Back':
-			# 		continue
-			# 	contours = []
-			# 	for contour in layer:
-			# 		contourPts = []
-			# 		for point in contour:
-			# 			contourPts.append(f'[{point.x}, {-point.y}, {point.on_curve}]')
-			# 		contours.append('['+", ".join(contourPts)+']')
-			# 	shapes.append('"' + runeRepr + '": ['+", ".join(contours)+']')
+		if glyph.references:
 			contours = []
-			for contour in getFontGlyphContours(font, glyphName):
-				contourPts = [f'[{x}, {-y}, {onCurve}]' for ((x,y), onCurve) in contour]
-				contours.append('['+", ".join(contourPts)+']')
-			shapes.append('"' + runeRepr + '": ['+", ".join(contours)+']')
-			for kern in glyph.getPosSub("*"):
-				if kern[1] == 'Pair':
-					# print(f'{rune}: pair substitution', kern)
-					glyphName2 = kern[2]
-					if glyphName2 in glyphNames:
-						rune2 = glyphNames[glyphName2]
-						rune2Repr = getRuneRepresentation(rune2)
-						hints.append('"' + runeRepr +rune2Repr + f'": {kern[5]}')
-				# else:
-				# 	print(f'{rune}: ignoring subtable', kern)
+			for (refGlyph, transform, _) in glyph.references:
+				for contour in self.getFontGlyphContours(refGlyph):
+					contourPts = []
+					for (point, onCurve) in contour:
+						contourPts.append((transformPoint(point, transform), onCurve))
+					contours.append(contourPts)
+			return contours
+		for layerName in glyph.layers:
+			layer = glyph.layers[layerName]
+			if layerName == 'Back':
+				continue
+			contours = []
+			for contour in layer:
+				contourPts = []
+				for point in contour:
+					contourPts.append(((point.x, point.y), point.on_curve))
+				contours.append(contourPts)
+			return contours
 
-	shapeStr = '{\n\t\t' + ", ".join(shapes) + '\n\t}'
-	advanceStr = '{\n\t\t' + ", ".join(advances) + '\n\t}'
-	hintStr = '{\n\t\t' + ", ".join(hints) + '\n\t}'
-	ligatureStr = '[\n\t\t' + ", ".join(['"'+getRuneRepresentation(a)+getRuneRepresentation(b)+'"' for (_,a,b) in ligatures]) + '\n\t]'
-	# leftBearingStr = '{\n\t\t' + ", ".join(leftBearings)+ '\n\t}'
-	return f"""import {{Font}} from '/js/text/font.js'
+	def getLigatures(self, glyphNames):
+		processed = {}
+		ligatures = []
+		additionalGlyphNames = {}
+		manualLigatures = ['ff', 'fi', 'fl', 'ft', 'fj', 'ff']
+		# the following ligatures are ignored as they aren't related to English text: ['IJ', 'ij', 'LJ', 'lj', 'NJ', 'nj', 'st', 'Dz', 'dz']
 
-	const fontRaw = {{
-		familyname:"{font.familyname}",
-		name:"{font.fontname}",
-		fontpath: "{fontpath}",
-		shapes: {shapeStr},
-		advances: {advanceStr},
-		hints: {hintStr},
-		size: {font.em},
-		ligatures: {ligatureStr},
-	}}
+		for glyphName in self.font:
+			glyph = self.font[glyphName]
+			match = False
+			for sub in glyph.getPosSub("*"):
+				# print('sub', glyphName, sub)
+				if sub[1] == 'Ligature' and "'liga'" in sub[0]:
+					elts = sub[2:]
+					if len(elts)> 2:
+						print(f'ignoring ligature {glyphName} for {elts}')
+						continue
+					a,b = sub[2], sub[3]
+					if a in glyphNames and b in glyphNames:
+						print(f'found ligature {glyphName} for {a} and {b}', sub[0])
+						arepr = getRuneRepresentation(glyphNames[a])
+						brepr = getRuneRepresentation(glyphNames[b])
+						ligatures.append((glyphName, arepr, brepr))
+						additionalGlyphNames[glyphName] = arepr+brepr
+						processed[arepr+brepr] = True
+						match = True
+				if match:
+					break
+		for rune in manualLigatures:
+			if rune in processed:
+				continue
+			glyph = None
+			name = None
+			if rune in self.font:
+				glyph = self.font[rune]
+				name = rune
+			underscored = rune[0] + '_' + rune[1]
+			if underscored in self.font:
+				glyph = self.font[underscored]
+				name = underscored
+			if glyph:
+				ligatures.append((name, rune[0], rune[1]))
+				additionalGlyphNames[name] = rune
+		return ligatures, additionalGlyphNames
 
-	const font = () => new Font(fontRaw)
+	def getFontOutput(self):
+		glyphNames = {}
+		shapes = []
+		advances = []
+		hints = []
+		
+		for rune in chars:
+			runeRepr = getRuneRepresentation(rune)
+			glyphName = fontforge.nameFromUnicode(ord(rune))
+			glyphNames[glyphName] = rune
+		ligatures, additionalGlyphNames = self.getLigatures(glyphNames)
+		for key,value in additionalGlyphNames.items():
+			glyphNames[key] = value
+		for (glyphName, rune) in glyphNames.items():
+			runeRepr = getRuneRepresentation(rune)
 
-	export {{font as {printableString(font.fontname)}Font}}
-	"""
+			if glyphName not in self.font:
+				raise GlyphNotInFontExcpetion(glyphName)
+			else:
+				glyph = self.font[glyphName]
+				advances.append('"'+runeRepr +f'": {glyph.width}')
+				contours = []
+				for contour in self.getFontGlyphContours(glyphName):
+					contourPts = [f'[{x}, {-y}, {onCurve}]' for ((x,y), onCurve) in contour]
+					contours.append('['+", ".join(contourPts)+']')
+				shapes.append('"' + runeRepr + '": ['+", ".join(contours)+']')
+				for kern in glyph.getPosSub("*"):
+					if kern[1] == 'Pair':
+						glyphName2 = kern[2]
+						if glyphName2 in glyphNames:
+							rune2 = glyphNames[glyphName2]
+							rune2Repr = getRuneRepresentation(rune2)
+							hints.append('"' + runeRepr +rune2Repr + f'": {kern[5]}')
+
+		shapeStr = '{\n\t\t' + ", ".join(shapes) + '\n\t}'
+		advanceStr = '{\n\t\t' + ", ".join(advances) + '\n\t}'
+		hintStr = '{\n\t\t' + ", ".join(hints) + '\n\t}'
+		ligatureStr = '[\n\t\t' + ", ".join(['"'+getRuneRepresentation(a)+getRuneRepresentation(b)+'"' for (_,a,b) in ligatures]) + '\n\t]'
+		return f"""import {{Font}} from '/js/text/font.js'
+
+		const fontRaw = {{
+			familyname:"{self.font.familyname}",
+			name:"{self.font.fontname}",
+			fontpath: "{self.fontpath}",
+			shapes: {shapeStr},
+			advances: {advanceStr},
+			hints: {hintStr},
+			size: {self.font.em},
+			ligatures: {ligatureStr},
+		}}
+
+		const font = () => new Font(fontRaw)
+
+		export {{font as {printableString(self.font.fontname)}Font}}
+		"""
 
 	
 def loadDirectory(dir):
@@ -263,6 +250,7 @@ def loadFont(fname):
 		'KefaIII', # incorrect 'Te' and 'To' kerning, might be processing the file wrong
 		'Khmer',
 		'Kohinoor',
+		# 'Krungthep', # ligature spacing is wrong
 		'Lao',
 		'Malayalam',
 		'MicrosoftSansSerif',
@@ -290,35 +278,36 @@ def loadFont(fname):
 	fonts = fontforge.fontsInFile(fname)
 	for fontName in fonts:
 		fontpath = fname + '(' + fontName + ')'
-		font = fontforge.open(fontpath)
-		if (font.fontname in processedFonts) :
-			print (f'fontname {font.fontname} has already been output')
+		fontInstance = fontforge.open(fontpath)
+		if (fontInstance.fontname in processedFonts) :
+			print (f'fontname {fontInstance.fontname} has already been output')
 			continue
 		valid = True
 		for elt in blacklist:
-			if elt in font.fontname:
-				print(f'fontname {font.fontname} filtered out for quality control issues')
+			if elt in fontInstance.fontname:
+				print(f'fontname {fontInstance.fontname} filtered out for quality control issues')
 				valid = False
 				break
 		if not valid:
 			continue
+		font = Font(fontInstance, fontpath)
 		try:
-			outfile = writeFontJS(font, fontpath)
+			outfile = font.writeFontJS()
 		except Exception as error:
 			print(f"{fontpath} couldn't be read, {error}")
-			font.close()
+			fontInstance.close()
 		else:
-			print(f"Successfully exported {font.fontname}")
+			print(f"Successfully exported {fontInstance.fontname}")
 			with open('imports.js', 'a') as file:
-				file.write(f"import {{ {printableString(font.fontname)}Font }} from '/js/text/fonts/{printableString(font.fontname)}.js'"+'\n')
+				file.write(f"import {{ {printableString(fontInstance.fontname)}Font }} from '/js/text/fonts/{printableString(fontInstance.fontname)}.js'"+'\n')
 			with open('exports.js', 'a') as file:
-				file.write(f"{printableString(font.fontname)}Font, " + '\n')
-			processedFonts[font.fontname] = True
-			font.close()
+				file.write(f"{printableString(fontInstance.fontname)}Font, " + '\n')
+			processedFonts[fontInstance.fontname] = True
+			fontInstance.close()
 		
 
 # directory = '/System/Library/Fonts/'
 # loadDirectory(directory)
 
-fname = '/System/Library/Fonts/Supplemental/Futura.ttc'
+fname = '/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf'
 loadFont(fname)
