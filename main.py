@@ -52,14 +52,6 @@ class Font:
 			f.write(output)		
 	  
 	def getFontGlyphContours(self, glyphName):
-		# custom replacements
-		if 'Times New Roman.ttf' in self.fontpath:
-			if glyphName == 'N':
-				glyphName = 'glyph49'
-		if 'Times New Roman Bold.ttf' in self.fontpath:
-			if glyphName == 'N':
-				glyphName = 'glyph1197'
-
 		glyph = self.font[glyphName]
 		
 		if glyph.references:
@@ -137,6 +129,13 @@ class Font:
 		for rune in chars:
 			runeRepr = getRuneRepresentation(rune)
 			glyphName = fontforge.nameFromUnicode(ord(rune))
+			# custom replacements for Times New Roman, the file seems broken
+			if 'Times New Roman.ttf' in self.fontpath:
+				if glyphName == 'N':
+					glyphName = 'glyph49'
+			if 'Times New Roman Bold.ttf' in self.fontpath:
+				if glyphName == 'N':
+					glyphName = 'glyph1197'
 			glyphNames[glyphName] = rune
 		ligatures, additionalGlyphNames = self.getLigatures(glyphNames)
 		for key,value in additionalGlyphNames.items():
@@ -309,5 +308,5 @@ def loadFont(fname):
 # directory = '/System/Library/Fonts/'
 # loadDirectory(directory)
 
-fname = '/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf'
+fname = '/System/Library/Fonts/Supplemental/Times New Roman.ttf'
 loadFont(fname)
